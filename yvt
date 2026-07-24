@@ -15,7 +15,7 @@ if [ -f "$script_dir/.env" ]; then
     set +a
 fi
 
-VERSION="1.3"
+VERSION="1.4"
 
 # Messages array for different languages
 declare -A MESSAGES
