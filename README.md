@@ -13,12 +13,13 @@ A CLI tool that downloads a video, translates it with Yandex's neural translatio
 
 ## ✨ Features
 
-- 📥 Downloads video from most popular hosting platforms via `yt-dlp`
+- 📥 Downloads video from most popular hosting platforms via `yt-dlp`, capped at 1080p by default (raise it with `-r` for 4K/8K sources)
 - 🗣️ Translates audio into Russian, English or Kazakh using Yandex's neural translation
-- 🎭 **Lively voices** — natural-sounding dubbing for en→ru translations (requires a Yandex OAuth token)
+- 🎭 **Lively voices** — natural-sounding dubbing for en→ru translations (requires a Yandex OAuth token), status shown in the output
 - 🔊 Mixes original + translated audio into one track, keeps a clean original-only track alongside it
 - 📝 Embeds subtitles (11 source languages supported) — skipped gracefully if Yandex can't provide them for the requested language pair
 - ⚡ Hardware-accelerated encoding: `h264_nvenc` (Nvidia/Linux), `h264_videotoolbox` (Apple Silicon/Intel Mac), falls back to `libx264`
+- 📈 Bitrate auto-scales to the downloaded resolution (144p → 4K+) unless you set `-b` yourself
 - 📋 Batch mode — process a whole file of links in one run
 - 🌍 UI in 3 languages (en, ru, kk), auto-detected from `$LANG`
 - 🐧🍎 Works on Linux and macOS
@@ -66,8 +67,9 @@ yvt [options] [args] <link>
 
 | Flag | Description | Default |
 |------|--------------|---------|
+| `-r` | Max download resolution, video height in pixels (e.g. `720`, `1080`, `1440`, `2160`) | `1080` |
 | `-v` | Original volume ratio (`0`–`0.6`) | `0.3` |
-| `-b` | Bitrate in Kbit (`50`–`20000`) | `450` |
+| `-b` | Bitrate in Kbit (`50`–`20000`) | auto, scaled to resolution (see below) |
 | `-c` | Passthrough mode, no re-encode if source is already h264/aac (`1`/`0`) | `0` |
 | `-f` | File with a list of links (batch mode) | — |
 | `-o` | Original video language (`en`, `ru`, `kk`, `zh`, `ko`, `ar`, `fr`, `it`, `es`, `de`, `ja`) | `en` |
@@ -76,20 +78,52 @@ yvt [options] [args] <link>
 | `--help` | Show help | |
 | `--version` | Show version | |
 
+**Automatic bitrate (when `-b` is not set):**
+
+| Source height | Bitrate |
+|----------------|---------|
+| ≤ 480p | 800 Kbit |
+| ≤ 720p | 1500 Kbit |
+| ≤ 1080p | 2500 Kbit |
+| ≤ 1440p | 4000 Kbit |
+| > 1440p | 8000 Kbit |
+
 ### Examples
 
 ```bash
-# Translate a single video, default settings
+# Translate a single video, default settings (1080p cap, auto bitrate, ru dub, en subs)
 yvt 'https://www.youtube.com/watch?v=example_video'
 
-# Custom volume/bitrate
-yvt -v 0.5 -b 800 'https://www.youtube.com/watch?v=example_video'
+# Download in 4K instead of the 1080p default
+yvt -r 2160 'https://www.youtube.com/watch?v=example_video'
 
-# Batch mode: process every link in a file
-yvt -v .2 -b 500 -f ./linklist.txt
+# Cap at 720p to save bandwidth/encode time
+yvt -r 720 'https://www.youtube.com/watch?v=example_video'
+
+# Custom volume ratio and an explicit bitrate (overrides auto-scaling)
+yvt -v 0.5 -b 3000 'https://www.youtube.com/watch?v=example_video'
 
 # Translate into English, request Russian subtitles
 yvt -l en -s ru 'https://www.youtube.com/watch?v=example_video'
+
+# Original video is in French, dub into Kazakh, French subtitles
+yvt -o fr -l kk -s fr 'https://www.youtube.com/watch?v=example_video'
+
+# Passthrough mode: skip re-encoding if the source is already h264/aac
+yvt -c 1 'https://www.youtube.com/watch?v=example_video'
+
+# Louder original track under the dub (default is 0.3)
+yvt -v 0.6 'https://www.youtube.com/watch?v=example_video'
+
+# Batch mode: process every link in a file, one shared set of options for all
+yvt -r 1080 -v 0.4 -f ./linklist.txt
+
+# Batch mode with 4K downloads and custom bitrate
+yvt -r 2160 -b 6000 -f ./linklist.txt
+
+# Show version / help
+yvt --version
+yvt --help
 ```
 
 ## 🤝 Contributing
