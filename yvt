@@ -29,11 +29,14 @@ MESSAGES=(
     ["en_args_file"]="Set file with a list of links"
     ["en_args_orig"]="Set original language (en, ru, kk, zh, ko, ar, fr, it, es, de, ja)"
     ["en_args_subs"]="Set subtitles language"
+    ["en_args_resolution"]="Set max download resolution in pixels, height (default: 1080)"
     ["en_args_volume"]="Set volume ratio"
     ["en_bitrate"]="Bitrate"
     ["en_bitrate_error"]="Bitrate must be a number in the range of 50 to 20000"
+    ["en_resolution_error"]="Resolution must be a number (video height in pixels), at least 144"
     ["en_done"]="Done!"
     ["en_encoder"]="Encoder"
+    ["en_lively_voice"]="Lively voice"
     ["en_examples"]="Examples"
     ["en_fail"]="Fail!"
     ["en_file_not_exist_error"]="File does not exist:"
@@ -65,11 +68,14 @@ MESSAGES=(
     ["ru_args_file"]="Задать файл со списком ссылок"
     ["ru_args_orig"]="Задать исходный язык (en, ru, kk, zh, ko, ar, fr, it, es, de, ja)"
     ["ru_args_subs"]="Задать язык субтитров"
+    ["ru_args_resolution"]="Задать максимальное разрешение скачивания в пикселях, высота (по умолчанию: 1080)"
     ["ru_args_volume"]="Задать отношение громкости оригинала"
     ["ru_bitrate"]="Битрейт"
     ["ru_bitrate_error"]="Битрейт должен быть числом в диапазоне от 50 до 20000"
+    ["ru_resolution_error"]="Разрешение должно быть числом (высота видео в пикселях), не менее 144"
     ["ru_done"]="Готово!"
     ["ru_encoder"]="Энкодер"
+    ["ru_lively_voice"]="Живой голос"
     ["ru_examples"]="Примеры"
     ["ru_fail"]="Неудача!"
     ["ru_file_not_exist_error"]="Файл не существует:"
@@ -101,11 +107,14 @@ MESSAGES=(
     ["kk_args_file"]="Қосымша сілтемелер тізімі бар файлды орнату"
     ["kk_args_orig"]="Бастапқы тілді орнату (en, ru, kk, zh, ko, ar, fr, it, es, de, ja)"
     ["kk_args_subs"]="Субтитр тілін орнату"
+    ["kk_args_resolution"]="Жүктеудің ең жоғары рұқсатын пиксельмен орнату, биіктік (әдепкі: 1080)"
     ["kk_args_volume"]="Туындылық ұқсасын орнату"
     ["kk_bitrate"]="Битрейт"
     ["kk_bitrate_error"]="Битрейт 50-ден 20000-ге дейін сандық болуы керек"
+    ["kk_resolution_error"]="Рұқсат сан болуы керек (видео биіктігі пиксельмен), кемінде 144"
     ["kk_done"]="Аяқталды!"
     ["kk_encoder"]="Коддаушы"
+    ["kk_lively_voice"]="Жанды дауыс"
     ["kk_examples"]="Мысалдар"
     ["kk_fail"]="Сәтсіздік!"
     ["kk_file_not_exist_error"]="Файл жоқ:"
@@ -182,12 +191,14 @@ parse_args() {
         echo -e "  -f — ${MESSAGES[${lang_app}_args_file]}"
         echo -e "  -o — ${MESSAGES[${lang_app}_args_orig]}"
         echo -e "  -l — ${MESSAGES[${lang_app}_args_lang]}"
-        echo -e "  -s — ${MESSAGES[${lang_app}_args_subs]}\n"
+        echo -e "  -s — ${MESSAGES[${lang_app}_args_subs]}"
+        echo -e "  -r — ${MESSAGES[${lang_app}_args_resolution]}\n"
         echo -e "\e[1m${MESSAGES[${lang_app}_options]}:\e[0m"
         echo -e "  --help — ${MESSAGES[${lang_app}_options_help]}"
         echo -e "  --version — ${MESSAGES[${lang_app}_options_version]}\n"
         echo -e "\e[1m${MESSAGES[${lang_app}_examples]}:\e[0m"
         echo -e "  yvt -v 0.5 -b 800 'https://www.youtube.com/watch?v=example_video'"
+        echo -e "  yvt -r 2160 'https://www.youtube.com/watch?v=example_video'"
         echo -e "  yvt -v .2 -b 500 -f ./linklist.txt"
     }
 
@@ -197,7 +208,7 @@ parse_args() {
         exit 1
     fi
 
-    while getopts ":c:v:b:f:o:l:s:-:" opt; do
+    while getopts ":c:v:b:f:o:l:s:r:-:" opt; do
         case ${opt} in
         v)
             # Check if the entered value is in the valid range
@@ -243,6 +254,13 @@ parse_args() {
                 exit 1
             fi
             subs_lang="--reslang=$OPTARG"
+            ;;
+        r)
+            if [[ ! "$OPTARG" =~ ^[0-9]+$ ]] || ((OPTARG < 144)); then
+                echo "${MESSAGES[${lang_app}_resolution_error]}" >&2
+                exit 1
+            fi
+            resolution=$OPTARG
             ;;
         o)
             if [[ ! "$OPTARG" =~ ^(en|ru|kk|zh|ko|ar|fr|it|es|de|ja)$ ]]; then
@@ -299,14 +317,14 @@ parse_args() {
         exit 0
     fi
 
-    video_link="${*: -1}"
-    parse_link "$video_link" || true
-
-    if [ -z "$video_link" ]; then
+    if [ $# -eq 0 ]; then
         echo "${MESSAGES[${lang_app}_link_required_error]}"
         usage
         exit 1
     fi
+
+    video_link="${*: -1}"
+    parse_link "$video_link" || true
 }
 
 # Function to process each link
@@ -341,7 +359,7 @@ parse_link() {
     esac
 
     original_sound_ratio=${original_sound_ratio:-0.3}
-    bitrate=${bitrate:-450}
+    resolution=${resolution:-1080}
     temp_dir=./temp
     temp_video_dir=$temp_dir/video
     temp_audio_dir=$temp_dir/audio
@@ -355,7 +373,7 @@ parse_link() {
     mkdir "$temp_dir" && mkdir "$temp_video_dir" && mkdir "$temp_audio_dir" && mkdir "$temp_subs_dir"
 
     attempts=0
-    while ! yt-dlp --progress --quiet -o "$temp_video" "$video_link" && ((attempts < 10)); do
+    while ! yt-dlp --progress --quiet -f "bestvideo[height<=$resolution]+bestaudio/best[height<=$resolution]" -o "$temp_video" "$video_link" && ((attempts < 10)); do
         ((attempts++))
         echo "${MESSAGES[${lang_app}_loading_error]} ${MESSAGES[${lang_app}_retrying]}$attempts"
         sleep 5
@@ -389,13 +407,34 @@ parse_link() {
 
     source_video_codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$temp_video_dir/$video_full_name" || true)
     source_audio_codec=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$temp_video_dir/$video_full_name" || true)
+    source_height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "$temp_video_dir/$video_full_name" || true)
 
     if [ "$source_video_codec" == "h264" ] && [ "$source_audio_codec" == "aac" ] && [ "${copy_mode:-false}" == true ]; then
         video_codec="copy"
     fi
 
+    if [ -z "${bitrate:-}" ]; then
+        if ((${source_height:-0} <= 480)); then
+            bitrate=800
+        elif ((${source_height:-0} <= 720)); then
+            bitrate=1500
+        elif ((${source_height:-0} <= 1080)); then
+            bitrate=2500
+        elif ((${source_height:-0} <= 1440)); then
+            bitrate=4000
+        else
+            bitrate=8000
+        fi
+    fi
+
+    lively_voice_status="off"
+    if [ "${#lively_voice_args[@]}" -gt 0 ]; then
+        lively_voice_status="on"
+    fi
+
     echo -e "🔊 ${MESSAGES[${lang_app}_volume]}: \e[1m$original_sound_ratio\e[0m"
     echo -e "📈 ${MESSAGES[${lang_app}_bitrate]}: \e[1m$bitrate Kbit\e[0m"
+    echo -e "🎭 ${MESSAGES[${lang_app}_lively_voice]}: \e[1m$lively_voice_status\e[0m"
     echo -e "📹 ${MESSAGES[${lang_app}_encoder]}: \e[1m$video_codec\e[0m"
     echo -e "📄 ${MESSAGES[${lang_app}_filename]}: \e[1m${video_full_name%.*}.mp4\e[0m"
 
